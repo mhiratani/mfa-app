@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import pyotp
 import time
 import json
@@ -51,32 +51,6 @@ def hash_pin(pin):
     """PINと秘密鍵とハードウェアIDを組み合わせてハッシュ化"""
     hardware_id = get_hardware_id()
     return hashlib.sha256((pin + SECRET_KEY + hardware_id).encode()).hexdigest()
-
-def set_pin():
-    """新しいPINを設定し、対応する暗号化キーを生成"""
-    while True:
-        pin = simpledialog.askstring("Set PIN", "Please set a 4-digit PIN:", show="*")
-        if pin and len(pin) == 4 and pin.isdigit():
-            salt = os.urandom(16)
-            hashed_pin = hash_pin(pin)
-            with open(PIN_FILE, 'wb') as f:
-                f.write(hashed_pin.encode() + salt)
-            return derive_key(pin, salt)
-        else:
-            messagebox.showerror("Invalid PIN", "Please enter a 4-digit number.")
-
-def verify_pin():
-    """ユーザーが入力したPINを検証し、正しい場合は暗号化キーを返す"""
-    with open(PIN_FILE, 'rb') as f:
-        stored_hash = f.read(64).decode()
-        salt = f.read(16)
-    
-    while True:
-        pin = simpledialog.askstring("Verify PIN", "Enter your 4-digit PIN:", show="*")
-        if pin and hash_pin(pin) == stored_hash:
-            return derive_key(pin, salt)
-        else:
-            messagebox.showerror("Incorrect PIN", "Please try again.")
 
 def derive_key(pin, salt):
     """PINとソルトから暗号化キーを導出"""
