@@ -111,11 +111,11 @@ class PinDialog(tk.Toplevel):
 
     def ok(self):
         pin = self.pin.get()
-        if len(pin) == 4 and pin.isdigit():
+        if len(pin) >= 8 and pin.isdigit():
             self.result = pin
             self.destroy()
         else:
-            messagebox.showerror("Invalid PIN", "Please enter a 4-digit number.")
+            messagebox.showerror("Invalid PIN", "Please enter at least 8 number.")
             self.pin.set("")  # PINをクリア
 
 def get_pin(parent, title):
@@ -379,7 +379,7 @@ def main():
 
     if not os.path.exists(PIN_FILE):
         pin = get_pin(root, "Set PIN")
-        if pin and len(pin) == 4 and pin.isdigit():
+        if pin and len(pin) >= 8 and pin.isdigit():
             encryption_key = set_pin_with_key(pin)
         else:
             messagebox.showerror("Invalid PIN", "Please enter a 4-digit number.")
