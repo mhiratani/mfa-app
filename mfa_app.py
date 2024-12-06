@@ -84,11 +84,12 @@ def save_accounts(accounts):
 
 # PINダイアログクラス
 class PinDialog(tk.Toplevel):
-    def __init__(self, parent, title):
+    def __init__(self, parent, title, initial):
         super().__init__(parent)
         self.title(title)
         self.pin = tk.StringVar()
         self.result = None
+        self.initial = initial
 
         self.create_widgets()
 
@@ -96,18 +97,23 @@ class PinDialog(tk.Toplevel):
         frame = ttk.Frame(self, padding="20 20 20 20")
         frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        ttk.Label(frame, text="Enter 4-digit PIN:", font=('Helvetica', 14)).grid(row=0, column=0, pady=10)
-        pin_entry = ttk.Entry(frame, textvariable=self.pin, show="*", font=('Helvetica', 14), width=10)
-        pin_entry.grid(row=1, column=0, pady=10)
+        ttk.Label(frame, text="Enter PIN:", font=('Helvetica', 14)).grid(row=0, column=0, pady=10)
+        if self.initial == True:    # 初回のPIN設定要件表示用
+            ttk.Label(frame, text="Choose a memorable 8+ digit PIN.", font=('Helvetica', 14)).grid(row=1, column=0, pady=10)
+            self.geometry("350x280")
+        else:
+            ttk.Label(frame, text="こんにちは", font=('Helvetica', 14)).grid(row=1, column=0, pady=10)
+            self.geometry("270x260")
+
+        pin_entry = ttk.Entry(frame, textvariable=self.pin, show="*", font=('Helvetica', 20), width=15)
+        pin_entry.grid(row=2, column=0, pady=10)
         pin_entry.focus()
 
         # Enterキーを押したときにもok関数を呼び出す
         pin_entry.bind('<Return>', lambda event: self.ok())
 
-        ok_button = ttk.Button(frame, text="OK", command=self.ok, width=20)
-        ok_button.grid(row=2, column=0, pady=10)
-
-        self.geometry("200x200")
+        ok_button = ttk.Button(frame, text="OK", command=self.ok, width=20, )
+        ok_button.grid(row=3, column=0, pady=10)
 
     def ok(self):
         pin = self.pin.get()
@@ -118,8 +124,8 @@ class PinDialog(tk.Toplevel):
             messagebox.showerror("Invalid PIN", "Please enter at least 8 number.")
             self.pin.set("")  # PINをクリア
 
-def get_pin(parent, title):
-    dialog = PinDialog(parent, title)
+def get_pin(parent, title, initial):
+    dialog = PinDialog(parent, title,initial)
     dialog.wait_window()
     return dialog.result
 
@@ -378,14 +384,13 @@ def main():
     root.withdraw()  # メインウィンドウを隠す
 
     if not os.path.exists(PIN_FILE):
-        pin = get_pin(root, "Set PIN")
+        pin = get_pin(root, "Set New PIN", True)
         if pin and len(pin) >= 8 and pin.isdigit():
             encryption_key = set_pin_with_key(pin)
         else:
-            messagebox.showerror("Invalid PIN", "Please enter a 4-digit number.")
             return
     else:
-        pin = get_pin(root, "Verify PIN")
+        pin = get_pin(root, "Verify PIN", False)
         if pin:
             encryption_key = verify_pin_with_key(pin)
             if encryption_key is None:
