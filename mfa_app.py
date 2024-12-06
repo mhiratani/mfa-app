@@ -1,15 +1,21 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import pyotp
 import time
 import json
+import re
 import os
+import cv2
+import numpy as np
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 import base64
 import hashlib
+import platform
+import subprocess
+import uuid
 
 # ソースコードに埋め込む秘密鍵（実際の使用時は変更してください）
 SECRET_KEY = "your_secret_key_here"
@@ -17,35 +23,34 @@ SECRET_KEY = "your_secret_key_here"
 PIN_FILE ='MagicalFlyingAlpaca-Pin.dat'
 ACCOUNTS_FILE ='MagicalFlyingAlpaca-Accounts.json'
 
-def hash_pin(pin):
-    """PINと秘密鍵を組み合わせてハッシュ化"""
-    return hashlib.sha256((pin + SECRET_KEY).encode()).hexdigest()
-
-def set_pin():
-    """新しいPINを設定し、対応する暗号化キーを生成"""
-    while True:
-        pin = simpledialog.askstring("Set PIN", "Please set a 4-digit PIN:", show="*")
-        if pin and len(pin) == 4 and pin.isdigit():
-            salt = os.urandom(16)
-            hashed_pin = hash_pin(pin)
-            with open(PIN_FILE, 'wb') as f:
-                f.write(hashed_pin.encode() + salt)
-            return derive_key(pin, salt)
-        else:
-            messagebox.showerror("Invalid PIN", "Please enter a 4-digit number.")
-
-def verify_pin():
-    """ユーザーが入力したPINを検証し、正しい場合は暗号化キーを返す"""
-    with open(PIN_FILE, 'rb') as f:
-        stored_hash = f.read(64).decode()
-        salt = f.read(16)
+def get_hardware_id():
+    system = platform.system()
+    if system == "Windows":
+        try:
+            result = subprocess.check_output("wmic baseboard get serialnumber").decode().split("\n")[1].strip()
+            return result if result else 'FFFFFFFF'
+        except:
+            pass
+    elif system == "Darwin":  # macOS
+        try:
+            result = subprocess.check_output(["system_profiler", "SPHardwareDataType"]).decode()
+            for line in result.split("\n"):
+                if "Hardware UUID" in line:
+                    return line.split(":")[1].strip()
+        except:
+            pass
     
-    while True:
-        pin = simpledialog.askstring("Verify PIN", "Enter your 4-digit PIN:", show="*")
-        if pin and hash_pin(pin) == stored_hash:
-            return derive_key(pin, salt)
-        else:
-            messagebox.showerror("Incorrect PIN", "Please try again.")
+    # Windows/macOSで取得できない場合、またはその他のOSの場合
+    try:
+        mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0,2*6,2)][::-1])
+        return mac if mac != '00:00:00:00:00:00' else 'FFFFFFFF'
+    except:
+        return 'FFFFFFFF'
+
+def hash_pin(pin):
+    """PINと秘密鍵とハードウェアIDを組み合わせてハッシュ化"""
+    hardware_id = get_hardware_id()
+    return hashlib.sha256((pin + SECRET_KEY + hardware_id).encode()).hexdigest()
 
 def derive_key(pin, salt):
     """PINとソルトから暗号化キーを導出"""
@@ -56,7 +61,8 @@ def derive_key(pin, salt):
         iterations=100000,
         backend=default_backend()
     )
-    key = base64.urlsafe_b64encode(kdf.derive((pin + SECRET_KEY).encode()))
+    hardware_id = get_hardware_id()
+    key = base64.urlsafe_b64encode(kdf.derive((pin + SECRET_KEY + hardware_id).encode()))
     return key
 
 # TOTPコードを生成する関数
@@ -136,11 +142,64 @@ class AddAccountDialog(tk.Toplevel):
         ttk.Entry(frame, textvariable=self.account_name, font=('Helvetica', 12), width=30).grid(row=1, column=0, pady=5)
 
         ttk.Label(frame, text="Secret Key:", font=('Helvetica', 12)).grid(row=2, column=0, pady=5, sticky="w")
-        ttk.Entry(frame, textvariable=self.secret_key, font=('Helvetica', 12), width=30).grid(row=3, column=0, pady=5)
+        secret_key_entry = ttk.Entry(frame, textvariable=self.secret_key, font=('Helvetica', 12), width=30)
+        secret_key_entry.grid(row=3, column=0, pady=5)
 
-        ttk.Button(frame, text="Add", command=self.ok, width=20).grid(row=4, column=0, pady=10)
+        ttk.Button(frame, text="Select QR Code", command=self.scan_qr_code).grid(row=4, column=0, pady=5)
+        ttk.Button(frame, text="Add", command=self.ok, width=20).grid(row=5, column=0, pady=10)
 
-        self.geometry("315x220")
+        self.geometry("315x270")
+
+    def scan_qr_code(self):
+        initial_dir = os.path.expanduser("~/Downloads")  # ダウンロードフォルダを初期ディレクトリとして設定
+        file_path = filedialog.askopenfilename(
+            initialdir=initial_dir,
+            title="Select QR Code Image",
+            filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.gif;*.bmp")]
+        )
+        if file_path:
+            result = self.read_qr_code(file_path)
+            if result['success']:
+                self.secret_key.set(result['secret_key'])
+                if 'issuer' in result:
+                    self.account_name.set(result['issuer'])
+                # ダイアログを最前面に持ってくる
+                self.lift()
+                self.focus_force()
+            else:
+                tk.messagebox.showerror("Error", result['message'])
+                # エラーダイアログの後にもダイアログを最前面に
+                self.after(100, self.lift)
+                self.after(100, self.focus_force)
+
+    def read_qr_code(self, image_path):
+        try:
+            # ファイルパスをバイト列として読み込む
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
+
+            # NumPy配列に変換
+            nparr = np.frombuffer(image_data, np.uint8)
+
+            # cv2.imdecodを使用して画像をデコード
+            img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+
+            if img is None:
+                return {'success': False, 'message': f"Failed to read image file: {os.path.basename(image_path)}"}
+
+            detector = cv2.QRCodeDetector()
+            data, bbox, _ = detector.detectAndDecode(img)
+            if bbox is not None:
+                secret_match = re.search(r'secret=([A-Z2-7]+)', data)
+                issuer_match = re.search(r'issuer=([^&]+)', data)
+                if secret_match:
+                    result = {'success': True, 'secret_key': secret_match.group(1)}
+                    if issuer_match:
+                        result['issuer'] = issuer_match.group(1)
+                    return result
+            return {'success': False, 'message': "Failed to extract information from QR code."}
+        except Exception as e:
+            return {'success': False, 'message': f"Error occurred while reading QR code: {str(e)}"}
 
     def ok(self):
         self.result = (self.account_name.get(), self.secret_key.get())
@@ -294,7 +353,7 @@ class MFAApp:
         return f.decrypt(encrypted_secret.encode()).decode()
 
 
-# PIN設定関数を変更
+# PIN設定関数
 def set_pin_with_key(pin):
     salt = os.urandom(16)
     hashed_pin = hash_pin(pin)
@@ -302,7 +361,7 @@ def set_pin_with_key(pin):
         f.write(hashed_pin.encode() + salt)
     return derive_key(pin, salt)
 
-# PIN検証関数を変更
+# PIN検証関数
 def verify_pin_with_key(pin):
     with open(PIN_FILE, 'rb') as f:
         stored_hash = f.read(64).decode()
