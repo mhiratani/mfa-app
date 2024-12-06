@@ -3,7 +3,10 @@ from tkinter import ttk, messagebox, simpledialog
 import pyotp
 import time
 import json
+import re
 import os
+import cv2
+import numpy as np
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
@@ -165,11 +168,64 @@ class AddAccountDialog(tk.Toplevel):
         ttk.Entry(frame, textvariable=self.account_name, font=('Helvetica', 12), width=30).grid(row=1, column=0, pady=5)
 
         ttk.Label(frame, text="Secret Key:", font=('Helvetica', 12)).grid(row=2, column=0, pady=5, sticky="w")
-        ttk.Entry(frame, textvariable=self.secret_key, font=('Helvetica', 12), width=30).grid(row=3, column=0, pady=5)
+        secret_key_entry = ttk.Entry(frame, textvariable=self.secret_key, font=('Helvetica', 12), width=30)
+        secret_key_entry.grid(row=3, column=0, pady=5)
 
-        ttk.Button(frame, text="Add", command=self.ok, width=20).grid(row=4, column=0, pady=10)
+        ttk.Button(frame, text="Select QR Code", command=self.scan_qr_code).grid(row=4, column=0, pady=5)
+        ttk.Button(frame, text="Add", command=self.ok, width=20).grid(row=5, column=0, pady=10)
 
-        self.geometry("315x220")
+        self.geometry("315x270")
+
+    def scan_qr_code(self):
+        initial_dir = os.path.expanduser("~/Downloads")  # ダウンロードフォルダを初期ディレクトリとして設定
+        file_path = filedialog.askopenfilename(
+            initialdir=initial_dir,
+            title="Select QR Code Image",
+            filetypes=[("Image files", "*.png;*.jpg;*.jpeg;*.gif;*.bmp")]
+        )
+        if file_path:
+            result = self.read_qr_code(file_path)
+            if result['success']:
+                self.secret_key.set(result['secret_key'])
+                if 'issuer' in result:
+                    self.account_name.set(result['issuer'])
+                # ダイアログを最前面に持ってくる
+                self.lift()
+                self.focus_force()
+            else:
+                tk.messagebox.showerror("Error", result['message'])
+                # エラーダイアログの後にもダイアログを最前面に
+                self.after(100, self.lift)
+                self.after(100, self.focus_force)
+
+    def read_qr_code(self, image_path):
+        try:
+            # ファイルパスをバイト列として読み込む
+            with open(image_path, 'rb') as f:
+                image_data = f.read()
+
+            # NumPy配列に変換
+            nparr = np.frombuffer(image_data, np.uint8)
+
+            # cv2.imdecodを使用して画像をデコード
+            img = cv2.imdecode(nparr, cv2.IMREAD_UNCHANGED)
+
+            if img is None:
+                return {'success': False, 'message': f"Failed to read image file: {os.path.basename(image_path)}"}
+
+            detector = cv2.QRCodeDetector()
+            data, bbox, _ = detector.detectAndDecode(img)
+            if bbox is not None:
+                secret_match = re.search(r'secret=([A-Z2-7]+)', data)
+                issuer_match = re.search(r'issuer=([^&]+)', data)
+                if secret_match:
+                    result = {'success': True, 'secret_key': secret_match.group(1)}
+                    if issuer_match:
+                        result['issuer'] = issuer_match.group(1)
+                    return result
+            return {'success': False, 'message': "Failed to extract information from QR code."}
+        except Exception as e:
+            return {'success': False, 'message': f"Error occurred while reading QR code: {str(e)}"}
 
     def ok(self):
         self.result = (self.account_name.get(), self.secret_key.get())
