@@ -211,6 +211,41 @@ class AddAccountDialog(tk.Toplevel):
         self.result = (self.account_name.get(), self.secret_key.get())
         self.destroy()
 
+# エクスポート用キーを取得するダイアログ
+class ExportKeyDialog(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Enter Export Key")
+        self.password = tk.StringVar()
+
+        self.create_widgets()
+
+    def create_widgets(self):
+        frame = ttk.Frame(self, padding="20 20 20 20")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        ttk.Label(frame, text="Enter 16 over character Export Key", font=('Helvetica', 12)).grid(row=0, column=0, pady=5)
+        ttk.Label(frame, text="The alphanumeric characters set here will be used during the import process.", font=('Helvetica', 12)).grid(row=1, column=0, pady=5)
+        password_entry = ttk.Entry(frame, textvariable=self.password, show="*", font=('Helvetica', 20), width=20)
+        password_entry.grid(row=2, column=0, pady=5)
+        password_entry.focus()
+
+        ttk.Button(frame, text="OK", command=self.ok).grid(row=3, column=0, pady=10)
+        # Enterキーを押したときにもok関数を呼び出す
+        password_entry.bind('<Return>', lambda event: self.ok())
+
+    def ok(self):
+        key = self.password.get()
+        if len(key) >= 16 and key.isalnum():
+            self.result = key
+            self.destroy()
+        else:
+            messagebox.showerror("Invalid Key", "Please enter a 16 over character alphanumeric key.")
+            self.password.set("")  # Reset the input
+            # エラーダイアログの後にもダイアログを最前面に
+            self.after(100, self.lift)
+            self.after(100, self.focus_force)
+
 # メインアプリケーションクラス
 class MFAApp:
     def __init__(self, master, encryption_key):
@@ -274,6 +309,11 @@ class MFAApp:
         ttk.Button(button_frame, text="Add Account", command=self.add_account).grid(row=0, column=0, padx=5)
         ttk.Button(button_frame, text="Remove Account", command=self.remove_account).grid(row=0, column=1, padx=5)
 
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=10)
+        ttk.Button(button_frame, text="Export", command=self.data_export).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="Import", command=self.data_inport).grid(row=0, column=1, padx=5)
+
         self.master.geometry("400x350")
 
         self.update_code()
@@ -322,6 +362,86 @@ class MFAApp:
                 else:
                     self.account_combo.set('')
                     self.current_account = None
+
+    # エクスポートメソッド用アカウント群の値のディクリプト
+    def decrypt_accounts(self):
+        decrypted_accounts = {}
+        for key, value in self.accounts.items():
+            decrypted_value = self.decrypt_secret(value)
+            decrypted_accounts[key] = decrypted_value
+        return decrypted_accounts
+
+    # インポートメソッド用アカウント群の値のエンクリプト
+    def process_imported_accounts(self, imported_accounts):
+        encrypted_accounts = {}
+        for key, value in imported_accounts.items():
+            encrypted_value = self.encrypt_secret(value)
+            encrypted_accounts[key] = encrypted_value
+        return encrypted_accounts
+
+    # エクスポートメソッド
+    def data_export(self):
+        dialog = ExportKeyDialog(self.master)
+        dialog.wait_window()
+
+        if not dialog.result:
+            return
+
+        export_key = hashlib.sha256(dialog.result.encode()).digest()  # Generate a key
+        try:
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="Save as"
+            )
+            if file_path:
+                fernet = Fernet(base64.urlsafe_b64encode(export_key))
+                decrypted_accounts = self.decrypt_accounts()
+                encrypted_data = fernet.encrypt(json.dumps(decrypted_accounts).encode())  # Encrypt data
+
+                with open(file_path, 'wb') as f:
+                    f.write(encrypted_data)
+                messagebox.showinfo("Export Successful", "Accounts were successfully exported.")
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"An error occurred while exporting: {str(e)}")
+
+    # インポートメソッド
+    def data_inport(self):
+        dialog = ExportKeyDialog(self.master)
+        dialog.wait_window()
+
+        if not dialog.result:
+            return
+
+        import_key = hashlib.sha256(dialog.result.encode()).digest()  # Generate a key
+        try:
+            file_path = filedialog.askopenfilename(
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="Open"
+            )
+            if file_path:
+                fernet = Fernet(base64.urlsafe_b64encode(import_key))
+                with open(file_path, 'rb') as f:
+                    encrypted_data = f.read()
+
+                decrypted_data = fernet.decrypt(encrypted_data).decode()  # Decrypt data
+                imported_accounts = json.loads(decrypted_data)
+                if messagebox.askyesno("Import Accounts", "Do you want to overwrite your existing accounts with the imported data?"):
+                    
+                    encrypted_accounts =self.process_imported_accounts(imported_accounts)
+                    save_accounts(encrypted_accounts)
+                    self.accounts.update(encrypted_accounts)
+                    self.account_combo['values'] = list(self.accounts.keys())
+                    if self.accounts:
+                        self.account_combo.set(list(self.accounts.keys())[0])
+                        self.current_account = self.account_combo.get()
+                    else:
+                        self.account_combo.set('')
+                        self.current_account = None
+
+                messagebox.showinfo("Import Successful", "Accounts were successfully imported.")
+        except Exception as e:
+            messagebox.showerror("Import Failed", f"An error occurred while importing: {str(e)}")
 
     # TOTPコードを更新するメソッド
     def update_code(self):
