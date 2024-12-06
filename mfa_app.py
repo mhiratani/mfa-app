@@ -10,6 +10,9 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 import base64
 import hashlib
+import platform
+import subprocess
+import uuid
 
 # ソースコードに埋め込む秘密鍵（実際の使用時は変更してください）
 SECRET_KEY = "your_secret_key_here"
@@ -17,9 +20,34 @@ SECRET_KEY = "your_secret_key_here"
 PIN_FILE ='MagicalFlyingAlpaca-Pin.dat'
 ACCOUNTS_FILE ='MagicalFlyingAlpaca-Accounts.json'
 
+def get_hardware_id():
+    system = platform.system()
+    if system == "Windows":
+        try:
+            result = subprocess.check_output("wmic baseboard get serialnumber").decode().split("\n")[1].strip()
+            return result if result else 'FFFFFFFF'
+        except:
+            pass
+    elif system == "Darwin":  # macOS
+        try:
+            result = subprocess.check_output(["system_profiler", "SPHardwareDataType"]).decode()
+            for line in result.split("\n"):
+                if "Hardware UUID" in line:
+                    return line.split(":")[1].strip()
+        except:
+            pass
+    
+    # Windows/macOSで取得できない場合、またはその他のOSの場合
+    try:
+        mac = ':'.join(['{:02x}'.format((uuid.getnode() >> elements) & 0xff) for elements in range(0,2*6,2)][::-1])
+        return mac if mac != '00:00:00:00:00:00' else 'FFFFFFFF'
+    except:
+        return 'FFFFFFFF'
+
 def hash_pin(pin):
-    """PINと秘密鍵を組み合わせてハッシュ化"""
-    return hashlib.sha256((pin + SECRET_KEY).encode()).hexdigest()
+    """PINと秘密鍵とハードウェアIDを組み合わせてハッシュ化"""
+    hardware_id = get_hardware_id()
+    return hashlib.sha256((pin + SECRET_KEY + hardware_id).encode()).hexdigest()
 
 def set_pin():
     """新しいPINを設定し、対応する暗号化キーを生成"""
@@ -56,7 +84,8 @@ def derive_key(pin, salt):
         iterations=100000,
         backend=default_backend()
     )
-    key = base64.urlsafe_b64encode(kdf.derive((pin + SECRET_KEY).encode()))
+    hardware_id = get_hardware_id()
+    key = base64.urlsafe_b64encode(kdf.derive((pin + SECRET_KEY + hardware_id).encode()))
     return key
 
 # TOTPコードを生成する関数
