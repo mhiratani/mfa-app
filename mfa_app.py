@@ -379,7 +379,7 @@ class MFAApp:
         return f.decrypt(encrypted_secret.encode()).decode()
 
 
-# PIN設定関数を変更
+# PIN設定関数
 def set_pin_with_key(pin):
     salt = os.urandom(16)
     hashed_pin = hash_pin(pin)
@@ -387,7 +387,7 @@ def set_pin_with_key(pin):
         f.write(hashed_pin.encode() + salt)
     return derive_key(pin, salt)
 
-# PIN検証関数を変更
+# PIN検証関数
 def verify_pin_with_key(pin):
     with open(PIN_FILE, 'rb') as f:
         stored_hash = f.read(64).decode()
