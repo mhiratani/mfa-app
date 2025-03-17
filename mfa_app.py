@@ -221,12 +221,12 @@ class AddAccountDialog(tk.Toplevel):
         self.result = (self.account_name.get(), self.secret_key.get())
         self.destroy()
 
-# エクスポート用キーを取得するダイアログ
-class ExportKeyDialog(tk.Toplevel):
+class ImportKeyDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
-        self.title("Enter Export Key")
+        self.title("Enter Import Key")
         self.password = tk.StringVar()
+        self.result = None
 
         self.create_widgets()
 
@@ -234,27 +234,145 @@ class ExportKeyDialog(tk.Toplevel):
         frame = ttk.Frame(self, padding="20 20 20 20")
         frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        ttk.Label(frame, text="Enter 16 over character Export Key", font=('Helvetica', 12)).grid(row=0, column=0, pady=5)
-        ttk.Label(frame, text="The alphanumeric characters set here will be used during the import process.", font=('Helvetica', 12)).grid(row=1, column=0, pady=5)
-        password_entry = ttk.Entry(frame, textvariable=self.password, show="*", font=('Helvetica', 20), width=20)
-        password_entry.grid(row=2, column=0, pady=5)
+        ttk.Label(frame, text="Enter your export key", font=('Helvetica', 12, 'bold')).grid(row=0, column=0, pady=5)
+        ttk.Label(frame, text="Enter the key you used when exporting your data.", 
+                 font=('Helvetica', 10)).grid(row=1, column=0, pady=5)
+        
+        password_entry = ttk.Entry(frame, textvariable=self.password, show="*", font=('Helvetica', 12), width=20)
+        password_entry.grid(row=2, column=0, pady=15)
         password_entry.focus()
 
-        ttk.Button(frame, text="OK", command=self.ok).grid(row=3, column=0, pady=10)
+        # ヒント
+        ttk.Label(frame, text="The key should be at least 16 characters long and include\nletters, numbers, and special characters.", 
+                 font=('Helvetica', 9), foreground='gray').grid(row=3, column=0, pady=5)
+
+        ok_button = ttk.Button(frame, text="Unlock Data", command=self.ok)
+        ok_button.grid(row=4, column=0, pady=10)
+        
         # Enterキーを押したときにもok関数を呼び出す
         password_entry.bind('<Return>', lambda event: self.ok())
+        
+        # ダイアログサイズ調整
+        self.geometry("350x250")
 
     def ok(self):
         key = self.password.get()
-        if len(key) >= 16 and key.isalnum():
+        if len(key) > 0:  # 最低限の検証
             self.result = key
             self.destroy()
         else:
-            messagebox.showerror("Invalid Key", "Please enter a 16 over character alphanumeric key.")
+            messagebox.showerror("Invalid Key", "Please enter your export key.")
             self.password.set("")  # Reset the input
             # エラーダイアログの後にもダイアログを最前面に
             self.after(100, self.lift)
             self.after(100, self.focus_force)
+
+# エクスポート用キーを取得するダイアログ
+class ExportKeyDialog(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Enter Export Key")
+        self.password = tk.StringVar()
+        self.password.trace_add("write", self.check_password_strength)
+        self.result = None
+
+        self.create_widgets()
+
+    def create_widgets(self):
+        frame = ttk.Frame(self, padding="20 20 20 20")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        ttk.Label(frame, text="Enter Export Key (16+ characters)", font=('Helvetica', 12)).grid(row=0, column=0, pady=5)
+        ttk.Label(frame, text="Must include letters, numbers, and special characters", font=('Helvetica', 10)).grid(row=1, column=0, pady=5)
+        
+        password_entry = ttk.Entry(frame, textvariable=self.password, show="*", font=('Helvetica', 12), width=20)
+        password_entry.grid(row=2, column=0, pady=5)
+        password_entry.focus()
+
+        # パスワード強度表示用のプログレスバーとラベル
+        self.strength_var = tk.StringVar(value="Password strength: Weak")
+        self.strength_label = ttk.Label(frame, textvariable=self.strength_var, font=('Helvetica', 10))
+        self.strength_label.grid(row=3, column=0, pady=5, sticky="w")
+        
+        self.strength_bar = ttk.Progressbar(frame, orient="horizontal", length=200, mode="determinate")
+        self.strength_bar.grid(row=4, column=0, pady=5)
+        
+        # 要件チェックリスト
+        self.requirements_frame = ttk.Frame(frame)
+        self.requirements_frame.grid(row=5, column=0, pady=5, sticky="w")
+        
+        self.length_var = tk.StringVar(value="❌ 16+ characters")
+        self.letters_var = tk.StringVar(value="❌ Contains letters")
+        self.numbers_var = tk.StringVar(value="❌ Contains numbers")
+        self.special_var = tk.StringVar(value="❌ Contains special characters")
+        
+        ttk.Label(self.requirements_frame, textvariable=self.length_var).grid(row=0, column=0, sticky="w")
+        ttk.Label(self.requirements_frame, textvariable=self.letters_var).grid(row=1, column=0, sticky="w")
+        ttk.Label(self.requirements_frame, textvariable=self.numbers_var).grid(row=2, column=0, sticky="w")
+        ttk.Label(self.requirements_frame, textvariable=self.special_var).grid(row=3, column=0, sticky="w")
+
+        self.ok_button = ttk.Button(frame, text="OK", command=self.ok)
+        self.ok_button.grid(row=6, column=0, pady=10)
+        self.ok_button["state"] = "disabled"  # 初期状態では無効化
+        
+        # Enterキーを押したときにもok関数を呼び出す
+        password_entry.bind('<Return>', lambda event: self.try_ok())
+        
+        # ダイアログサイズ調整
+        self.geometry("350x350")
+
+    def check_password_strength(self, *args):
+        """パスワードの強度をリアルタイムでチェックする"""
+        password = self.password.get()
+        
+        # 各要件のチェック
+        has_length = len(password) >= 16
+        has_letters = bool(re.search(r'[a-zA-Z]', password))
+        has_numbers = bool(re.search(r'\d', password))
+        has_special = bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password))
+        
+        # 要件表示の更新
+        self.length_var.set(f"{'✅' if has_length else '❌'} 16+ characters")
+        self.letters_var.set(f"{'✅' if has_letters else '❌'} Contains letters")
+        self.numbers_var.set(f"{'✅' if has_numbers else '❌'} Contains numbers")
+        self.special_var.set(f"{'✅' if has_special else '❌'} Contains special characters")
+        
+        # 強度計算 (0-100)
+        strength = 0
+        if has_length: strength += 25
+        if has_letters: strength += 25
+        if has_numbers: strength += 25
+        if has_special: strength += 25
+        
+        # 強度バーとラベルの更新
+        self.strength_bar["value"] = strength
+        
+        if strength < 50:
+            strength_text = "Weak"
+            self.strength_label.config(foreground="red")
+        elif strength < 100:
+            strength_text = "Medium"
+            self.strength_label.config(foreground="orange")
+        else:
+            strength_text = "Strong"
+            self.strength_label.config(foreground="green")
+            
+        self.strength_var.set(f"Password strength: {strength_text}")
+        
+        # OKボタンの有効/無効を設定
+        if has_length and has_letters and has_numbers and has_special:
+            self.ok_button["state"] = "normal"
+        else:
+            self.ok_button["state"] = "disabled"
+
+    def try_ok(self):
+        """Enterキーが押されたときに、要件を満たしていればOKを実行"""
+        if self.ok_button["state"] == "normal":
+            self.ok()
+
+    def ok(self):
+        self.result = self.password.get()
+        self.destroy()
 
 # メインアプリケーションクラス
 class MFAApp:
@@ -417,7 +535,7 @@ class MFAApp:
 
     # インポートメソッド
     def data_inport(self):
-        dialog = ExportKeyDialog(self.master)
+        dialog = ImportKeyDialog(self.master)
         dialog.wait_window()
 
         if not dialog.result:
@@ -434,11 +552,15 @@ class MFAApp:
                 with open(file_path, 'rb') as f:
                     encrypted_data = f.read()
 
-                decrypted_data = fernet.decrypt(encrypted_data).decode()  # Decrypt data
-                imported_accounts = json.loads(decrypted_data)
+                try:
+                    decrypted_data = fernet.decrypt(encrypted_data).decode()  # Decrypt data
+                    imported_accounts = json.loads(decrypted_data)
+                except Exception:
+                    messagebox.showerror("Import Failed", "Invalid key or corrupted data file.")
+                    return
+
                 if messagebox.askyesno("Import Accounts", "Do you want to overwrite your existing accounts with the imported data?"):
-                    
-                    encrypted_accounts =self.process_imported_accounts(imported_accounts)
+                    encrypted_accounts = self.process_imported_accounts(imported_accounts)
                     save_accounts(encrypted_accounts)
                     self.accounts.update(encrypted_accounts)
                     self.account_combo['values'] = list(self.accounts.keys())
