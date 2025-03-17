@@ -1,4 +1,4 @@
-# Python関連
+# 基本的なPython関連の除外（dist/を除く）
 __pycache__/
 *.py[cod]
 *$py.class
@@ -6,7 +6,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -44,3 +43,13 @@ MagicalFlyingAlpaca-Accounts.json
 # その他の一時ファイル
 *.tmp
 *.bak
+
+# dist/ ディレクトリの中身を基本的に除外
+dist/*
+
+# 必要なファイルのみ含める
+!dist/MagicalFlyingAlpaca.exe
+!dist/install.ps1
+!dist/install.bat
+!dist/MagicalFlyingAlpaca-CodeSigningCert.cer
+!dist/build_info.txt
