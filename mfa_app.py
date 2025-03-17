@@ -331,7 +331,7 @@ class MFAApp:
         if self.current_code:
             self.master.clipboard_clear()
             self.master.clipboard_append(self.current_code)
-            messagebox.showinfo("Copied", "Code copied to clipboard!")
+            self.code_label.config(text="Copied!")
         else:
             messagebox.showwarning("No Code", "No code available to copy.")
 
