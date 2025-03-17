@@ -1,7 +1,7 @@
 ﻿Application Name: MagicalFlyingAlpaca
-Version: 1.0.0
-Build Date/Time: 2025-03-17 10:27:06
-Git Commit Hash: 7ec5861
+Version: 1.0.1
+Build Date/Time: 2025-03-17 12:05:24
+Git Commit Hash: c5bc839
 Certificate Subject: CN=MasayukiHiratani Dev Cert
 Certificate Serial Number: 1ED1B044DA5F7DAC45B1189FE158BA82
 Certificate Expiry Date: 03/17/2026 08:27:54

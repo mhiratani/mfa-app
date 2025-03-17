@@ -1,7 +1,7 @@
 # copy_and_sign.ps1
 $appName = "MagicalFlyingAlpaca"
 $tempName = "TempBuildApp"
-$version = "1.0.0"
+$version = "1.0.1"
 
 # Check if temporary file exists
 if (-not (Test-Path "dist\$tempName.exe")) {

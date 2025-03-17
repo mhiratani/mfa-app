@@ -1,5 +1,5 @@
 @echo off
-REM build_and_sign_admin.bat
+REM build_and_sign_all.bat
 REM Check for admin rights and self-elevate if needed
 >nul 2>&1 "%SYSTEMROOT%\system32\cacls.exe" "%SYSTEMROOT%\system32\config\system"
 if '%errorlevel%' NEQ '0' (

@@ -5,6 +5,7 @@ import time
 import json
 import re
 import os
+import sys
 import cv2
 import numpy as np
 from cryptography.fernet import Fernet
@@ -19,9 +20,18 @@ import uuid
 
 # ソースコードに埋め込む秘密鍵（実際の使用時は変更してください）
 SECRET_KEY = "your_secret_key_here"
+
 # 関連ファイル名の設定
-PIN_FILE ='MagicalFlyingAlpaca-Pin.dat'
-ACCOUNTS_FILE ='MagicalFlyingAlpaca-Accounts.json'
+# 実行ファイルの場所を取得
+if getattr(sys, 'frozen', False):
+    # PyInstallerなどでパッケージ化された場合
+    application_path = os.path.dirname(sys.executable)
+else:
+    # 通常のPythonスクリプトの場合
+    application_path = os.path.dirname(os.path.abspath(__file__))
+
+PIN_FILE = os.path.join(application_path, 'MagicalFlyingAlpaca-Pin.dat')
+ACCOUNTS_FILE = os.path.join(application_path, 'MagicalFlyingAlpaca-Accounts.json')
 
 def get_hardware_id():
     system = platform.system()
