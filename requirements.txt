@@ -1,0 +1,5 @@
+pyotp
+cryptography
+opencv-python
+numpy
+pyinstaller
