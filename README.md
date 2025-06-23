@@ -96,7 +96,7 @@ This application is a simple tool for managing multi-factor authentication (MFA)
 
 ### How to Install Libraries / ライブラリのインストール方法
 ```
-pip install pyotp cryptography opencv-python numpy
+pip install -r requirements.txt
 ```
 
 ### How to Create a Self-Signed Certificate / 自己署名証明書の作成方法
@@ -144,14 +144,11 @@ Before converting this Python script to an executable file, please make sure to 
 このPythonスクリプトをexe形式の実行可能ファイルに変換する前に、以下の重要な手順を必ず実行してください：
 
 1. Change the `SECRET_KEY` variable in the source code:
-   ソースコード内の `SECRET_KEY` 変数を変更します：
-   - Open the `mfa_app.py` file.
-     `mfa_app.py` ファイルを開きます。
-   - Find the following line:
-     以下の行を探します：
-     ```python
-     SECRET_KEY = "your_secret_key_here"
-     ```
+   .envファイル内の `SECRET_KEY` 変数を変更します
+    - `.env_sample` file rename for `.env` .
+    `.env_sample` ファイルを`.env`にリネームします。
+   - Open the `.env` file.
+     `.env` ファイルを開きます。
    - Replace `"your_secret_key_here"` with your own secure and unpredictable string.
      `"your_secret_key_here"` を、独自の安全で予測不可能な文字列に置き換えます。
    - This step is very important. Leaving the default value will significantly reduce the security of the application.

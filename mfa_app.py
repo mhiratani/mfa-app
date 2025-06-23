@@ -17,9 +17,9 @@ import hashlib
 import platform
 import subprocess
 import uuid
-
-# ソースコードに埋め込む秘密鍵（実際の使用時は変更してください）
-SECRET_KEY = "your_secret_key_here"
+from dotenv import load_dotenv
+load_dotenv()
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # 関連ファイル名の設定
 # 実行ファイルの場所を取得
