@@ -20,6 +20,10 @@ import uuid
 from dotenv import load_dotenv
 load_dotenv()
 SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    print("ERROR: SECRET_KEY not found in environment variables.")
+    print("Please ensure .env file exists with SECRET_KEY defined.")
+    sys.exit(1)
 
 # 関連ファイル名の設定
 # 実行ファイルの場所を取得
