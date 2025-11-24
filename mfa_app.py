@@ -25,7 +25,6 @@ if not SECRET_KEY:
     print("Please ensure .env file exists with SECRET_KEY defined.")
     sys.exit(1)
 
-# 関連ファイル名の設定
 # 実行ファイルの場所を取得
 if getattr(sys, 'frozen', False):
     # PyInstallerなどでパッケージ化された場合
@@ -34,8 +33,28 @@ else:
     # 通常のPythonスクリプトの場合
     application_path = os.path.dirname(os.path.abspath(__file__))
 
-PIN_FILE = os.path.join(application_path, 'MagicalFlyingAlpaca-Pin.dat')
-ACCOUNTS_FILE = os.path.join(application_path, 'MagicalFlyingAlpaca-Accounts.json')
+# 設定クラス
+class Config:
+    """アプリケーション設定を管理するクラス"""
+    # ファイルパス
+    PIN_FILE = os.path.join(application_path, 'MagicalFlyingAlpaca-Pin.dat')
+    ACCOUNTS_FILE = os.path.join(application_path, 'MagicalFlyingAlpaca-Accounts.json')
+    
+    # TOTP設定
+    TOTP_PERIOD = 30  # 秒
+    
+    # 暗号化設定
+    PBKDF2_ITERATIONS = 100000
+    SALT_LENGTH = 16
+    
+    # PIN設定
+    MIN_PIN_LENGTH = 8
+    
+    # エクスポートキー設定
+    MIN_EXPORT_KEY_LENGTH = 16
+    
+    # UI設定
+    MAIN_WINDOW_SIZE = "400x350"
 
 def get_hardware_id():
     system = platform.system()
@@ -86,14 +105,14 @@ def generate_totp(secret_key):
 
 # アカウント情報をJSONファイルからロードする関数
 def load_accounts():
-    if os.path.exists(ACCOUNTS_FILE):
-        with open(ACCOUNTS_FILE, 'r') as f:
+    if os.path.exists(Config.ACCOUNTS_FILE):
+        with open(Config.ACCOUNTS_FILE, 'r') as f:
             return json.load(f)
     return {}
 
 # アカウント情報をJSONファイルに保存する関数
 def save_accounts(accounts):
-    with open(ACCOUNTS_FILE, 'w') as f:
+    with open(Config.ACCOUNTS_FILE, 'w') as f:
         json.dump(accounts, f)
 
 # PINダイアログクラス
@@ -131,11 +150,11 @@ class PinDialog(tk.Toplevel):
 
     def ok(self):
         pin = self.pin.get()
-        if len(pin) >= 8 and pin.isdigit():
+        if len(pin) >= Config.MIN_PIN_LENGTH and pin.isdigit():
             self.result = pin
             self.destroy()
         else:
-            messagebox.showerror("Invalid PIN", "Please enter at least 8 number.")
+            messagebox.showerror("Invalid PIN", f"Please enter at least {Config.MIN_PIN_LENGTH} number.")
             self.pin.set("")  # PINをクリア
 
 def get_pin(parent, title, initial):
@@ -273,6 +292,11 @@ class ImportKeyDialog(tk.Toplevel):
 
 # エクスポート用キーを取得するダイアログ
 class ExportKeyDialog(tk.Toplevel):
+    # クラスレベルで正規表現パターンをコンパイル（再利用のため）
+    LETTER_PATTERN = re.compile(r'[a-zA-Z]')
+    NUMBER_PATTERN = re.compile(r'\d')
+    SPECIAL_PATTERN = re.compile(r'[!@#$%^&*(),.?":{}|<>]')
+    
     def __init__(self, parent):
         super().__init__(parent)
         self.title("Enter Export Key")
@@ -330,10 +354,10 @@ class ExportKeyDialog(tk.Toplevel):
         password = self.password.get()
         
         # 各要件のチェック
-        has_length = len(password) >= 16
-        has_letters = bool(re.search(r'[a-zA-Z]', password))
-        has_numbers = bool(re.search(r'\d', password))
-        has_special = bool(re.search(r'[!@#$%^&*(),.?":{}|<>]', password))
+        has_length = len(password) >= Config.MIN_EXPORT_KEY_LENGTH
+        has_letters = bool(self.LETTER_PATTERN.search(password))
+        has_numbers = bool(self.NUMBER_PATTERN.search(password))
+        has_special = bool(self.SPECIAL_PATTERN.search(password))
         
         # 要件表示の更新
         self.length_var.set(f"{'✅' if has_length else '❌'} 16+ characters")
@@ -388,6 +412,7 @@ class MFAApp:
         self.accounts = load_accounts()
         self.current_account = None
         self.current_code = ""
+        self.last_totp_period = -1  # 最後に更新したTOTP周期を追跡
 
         self.create_widgets()
         self.bind_keys()
@@ -446,13 +471,14 @@ class MFAApp:
         ttk.Button(button_frame, text="Export", command=self.data_export).grid(row=0, column=0, padx=5)
         ttk.Button(button_frame, text="Import", command=self.data_inport).grid(row=0, column=1, padx=5)
 
-        self.master.geometry("400x350")
+        self.master.geometry(Config.MAIN_WINDOW_SIZE)
 
         self.update_code()
 
     # アカウントが選択されたときのコールバック
     def on_account_select(self, event):
         self.current_account = self.account_combo.get()
+        self.last_totp_period = -1  # 更新
 
     def bind_keys(self):
         # Enterキーを押したときにcopy_codeメソッドを呼び出す
@@ -545,60 +571,74 @@ class MFAApp:
         if not dialog.result:
             return
 
-        import_key = hashlib.sha256(dialog.result.encode()).digest()  # Generate a key
+        import_key = hashlib.sha256(dialog.result.encode()).digest()
         try:
             file_path = filedialog.askopenfilename(
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
                 title="Open"
             )
-            if file_path:
-                fernet = Fernet(base64.urlsafe_b64encode(import_key))
-                with open(file_path, 'rb') as f:
-                    encrypted_data = f.read()
+            if not file_path:
+                return
+            
+            fernet = Fernet(base64.urlsafe_b64encode(import_key))
+            with open(file_path, 'rb') as f:
+                encrypted_data = f.read()
 
-                try:
-                    decrypted_data = fernet.decrypt(encrypted_data).decode()  # Decrypt data
-                    imported_accounts = json.loads(decrypted_data)
-                except Exception:
-                    messagebox.showerror("Import Failed", "Invalid key or corrupted data file.")
-                    return
+            try:
+                decrypted_data = fernet.decrypt(encrypted_data).decode()
+                imported_accounts = json.loads(decrypted_data)
+            except Exception:
+                messagebox.showerror("Import Failed", "Invalid key or corrupted data file.")
+                return
 
-                if messagebox.askyesno("Import Accounts", "Do you want to overwrite your existing accounts with the imported data?"):
-                    encrypted_accounts = self.process_imported_accounts(imported_accounts)
-                    save_accounts(encrypted_accounts)
-                    self.accounts.update(encrypted_accounts)
-                    self.account_combo['values'] = list(self.accounts.keys())
-                    if self.accounts:
-                        self.account_combo.set(list(self.accounts.keys())[0])
-                        self.current_account = self.account_combo.get()
-                    else:
-                        self.account_combo.set('')
-                        self.current_account = None
-
+            if messagebox.askyesno("Import Accounts", "Do you want to overwrite your existing accounts with the imported data?"):
+                # 現在のPIN暗号化キーで再暗号化
+                encrypted_accounts = self.process_imported_accounts(imported_accounts)
+                save_accounts(encrypted_accounts)
+                self.accounts = encrypted_accounts
+                
+                # UIを更新
+                self.account_combo['values'] = list(self.accounts.keys())
+                if self.accounts:
+                    self.account_combo.set(list(self.accounts.keys())[0])
+                    self.current_account = self.account_combo.get()
+                    self.last_totp_period = -1  # TOTPコードを強制的に更新
+                else:
+                    self.account_combo.set('')
+                    self.current_account = None
+                    self.last_totp_period = -1
+                
                 messagebox.showinfo("Import Successful", "Accounts were successfully imported.")
         except Exception as e:
             messagebox.showerror("Import Failed", f"An error occurred while importing: {str(e)}")
 
     # TOTPコードを更新するメソッド
     def update_code(self):
-        if self.current_account:
+        current_time = int(time.time())
+        current_period = current_time // Config.TOTP_PERIOD
+        
+        # TOTPコードが変わる時のみ更新
+        if self.current_account and current_period != self.last_totp_period:
             try:
                 encrypted_secret = self.accounts[self.current_account]
                 decrypted_secret = self.decrypt_secret(encrypted_secret)
                 self.current_code = generate_totp(decrypted_secret)
                 self.code_label.config(text=self.current_code)
                 self.copy_button.state(['!disabled'])
+                self.last_totp_period = current_period
             except Exception as e:
-                print(f"Error decrypting secret for {self.current_account}: {str(e)}")
+                print(f"Error decrypting secret: {str(e)}")
                 self.code_label.config(text="Error")
                 self.copy_button.state(['disabled'])
-        else:
+                self.current_code = ""
+        elif not self.current_account:
             self.code_label.config(text="")
             self.copy_button.state(['disabled'])
+            self.current_code = ""
+            self.last_totp_period = -1
 
-        # 残り時間を計算して表示
-        current_time = int(time.time())
-        seconds_left = 30 - (current_time % 30)
+        # 残り時間を計算して表示（毎秒更新）
+        seconds_left = Config.TOTP_PERIOD - (current_time % Config.TOTP_PERIOD)
         self.time_label.config(text=f"Refreshing in {seconds_left} seconds")
 
         # 1秒後に再度update_codeを呼び出す
@@ -617,17 +657,17 @@ class MFAApp:
 
 # PIN設定関数
 def set_pin_with_key(pin):
-    salt = os.urandom(16)
+    salt = os.urandom(Config.SALT_LENGTH)
     hashed_pin = hash_pin(pin)
-    with open(PIN_FILE, 'wb') as f:
+    with open(Config.PIN_FILE, 'wb') as f:
         f.write(hashed_pin.encode() + salt)
     return derive_key(pin, salt)
 
 # PIN検証関数
 def verify_pin_with_key(pin):
-    with open(PIN_FILE, 'rb') as f:
+    with open(Config.PIN_FILE, 'rb') as f:
         stored_hash = f.read(64).decode()
-        salt = f.read(16)
+        salt = f.read(Config.SALT_LENGTH)
     
     if hash_pin(pin) == stored_hash:
         return derive_key(pin, salt)
@@ -639,9 +679,9 @@ def main():
     root = tk.Tk()
     root.withdraw()  # メインウィンドウを隠す
 
-    if not os.path.exists(PIN_FILE):
+    if not os.path.exists(Config.PIN_FILE):
         pin = get_pin(root, "Set New PIN", True)
-        if pin and len(pin) >= 8 and pin.isdigit():
+        if pin and len(pin) >= Config.MIN_PIN_LENGTH and pin.isdigit():
             encryption_key = set_pin_with_key(pin)
         else:
             return
