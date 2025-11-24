@@ -3,3 +3,4 @@ cryptography
 opencv-python
 numpy
 pyinstaller
+python-dotenv
