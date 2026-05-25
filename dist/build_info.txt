@@ -1,7 +1,0 @@
-﻿Application Name: MagicalFlyingAlpaca
-Version: 1.0.2
-Build Date/Time: 2025-11-25 08:17:25
-Git Commit Hash: 301bd7b
-Certificate Subject: CN=Hilamalu
-Certificate Serial Number: 5854BA4B081F38B946E4AC41AFBA4D63
-Certificate Expiry Date: 11/24/2026 23:39:43

@@ -1,0 +1,38 @@
+[package]
+name = "magical-flying-alpaca-tauri"
+version = "1.0.0"
+description = "MFA (Multi-Factor Authentication) code manager"
+authors = ["MagicalFlyingAlpaca Team"]
+edition = "2021"
+
+[lib]
+name = "magical_flying_alpaca_tauri_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-store = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+totp-rs = { version = "5", features = ["otpauth"] }
+aes-gcm = "0.10"
+argon2 = "0.5"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+hex = "0.4"
+dirs = "5"
+# Python版エクスポート互換のための Fernet 復号 (Pure Rust 実装)
+aes = "0.8"
+cbc = "0.1"
+hmac = "0.12"
+# QRコード画像読み取り
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "bmp"] }
+rqrr = "0.7"
+url = "2"
